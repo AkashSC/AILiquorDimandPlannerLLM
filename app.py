@@ -13,7 +13,7 @@ if user_query:
     st.sidebar.markdown(f"**AI Response:**\n\n{reply}")
 
 st.subheader("📊 Demand Forecast Dashboard")
-st.markdown("*(Your existing ML model outputs and visualizations go here)*")
+st.markdown("*(Your ML model outputs and visualizations go here)*")
 
-# Example placeholder
+# Example placeholder chart
 st.line_chart({"Whiskey": [120, 135, 150], "Wine": [80, 95, 110]})
