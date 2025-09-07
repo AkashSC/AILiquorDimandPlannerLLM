@@ -22,7 +22,7 @@ def get_llm_response(prompt: str) -> str:
         return "⚠️ Please enter a valid question."
 
     payload = {
-        "model": "llama3-8b-8192",  # ✅ supported Groq model
+        "model": "llama-3.1-8b-instant",  # ✅ supported Groq model
         "messages": [
             {"role": "system", "content": "You are a helpful AI assistant for liquor demand planning."},
             {"role": "user", "content": clean_prompt}
