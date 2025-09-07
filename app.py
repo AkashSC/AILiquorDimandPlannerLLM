@@ -1,12 +1,14 @@
 import os
 import json
 import requests
+import pandas as pd
 import streamlit as st
+from prophet import Prophet
 
 # -----------------------------
 # LLM Response Function (Groq)
 # -----------------------------
-def get_llm_response(prompt: str) -> str:
+def get_llm_response(prompt: str, data_summary: str = "") -> str:
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         return "❌ GROQ_API_KEY environment variable not set in Render."
@@ -21,11 +23,23 @@ def get_llm_response(prompt: str) -> str:
     if not clean_prompt:
         return "⚠️ Please enter a valid question."
 
+    # Combine query + dataset context
+    full_prompt = f"""
+    You are an AI advisor for liquor demand planning.
+    Use the dataset summary and forecast data below to answer the question.
+
+    Dataset summary:
+    {data_summary}
+
+    Question:
+    {clean_prompt}
+    """
+
     payload = {
         "model": "llama-3.1-8b-instant",  # ✅ supported Groq model
         "messages": [
-            {"role": "system", "content": "You are a helpful AI assistant for liquor demand planning."},
-            {"role": "user", "content": clean_prompt}
+            {"role": "system", "content": "You are a helpful AI advisor for liquor demand forecasting."},
+            {"role": "user", "content": full_prompt}
         ],
         "temperature": 0.7,
         "max_tokens": 512
@@ -35,7 +49,6 @@ def get_llm_response(prompt: str) -> str:
         response = requests.post(url, headers=headers, json=payload)
 
         if response.status_code != 200:
-            # Show full Groq error JSON for debugging
             try:
                 err_data = response.json()
                 return f"⚠️ API Error:\n```json\n{json.dumps(err_data, indent=2)}\n```"
@@ -52,30 +65,59 @@ def get_llm_response(prompt: str) -> str:
 # Streamlit UI
 # -----------------------------
 st.set_page_config(page_title="Liquor Demand Planner", layout="wide")
-st.title("🍷 Liquor Demand Planner with AI Assistant")
+st.title("🍷 Liquor Demand Planner with AI + ML Forecast")
 
-# Sidebar - AI Q&A
+# Load dataset
+df = pd.read_csv("liquor_sales.csv")
+
+st.subheader("📊 Historical Sales Data")
+st.dataframe(df)
+
+# -----------------------------
+# Prophet Forecast
+# -----------------------------
+st.subheader("🔮 Forecasting with Prophet")
+
+# Prepare data for Prophet (Wine example, can loop for others)
+df_wine = df[["Month", "Wine"]].copy()
+df_wine["ds"] = pd.date_range(start="2023-01-01", periods=len(df_wine), freq="M")
+df_wine["y"] = df_wine["Wine"]
+
+model = Prophet()
+model.fit(df_wine[["ds", "y"]])
+
+future = model.make_future_dataframe(periods=3, freq="M")
+forecast = model.predict(future)
+
+# Show forecast dataframe
+st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(5))
+
+# Visualization
+st.line_chart({
+    "Historical": list(df_wine["y"]) + [None] * 3,
+    "Forecast": list(forecast["yhat"])
+})
+
+# -----------------------------
+# AI Advisor Section
+# -----------------------------
 st.sidebar.header("🔍 Ask the AI")
 user_query = st.sidebar.text_area(
     "Type your question (e.g., demand trends, inventory tips, seasonal forecasts):",
-    placeholder="Example: What will be the demand for whiskey during Diwali season?"
+    placeholder="Example: Forecast wine sales in December"
 )
 
 if st.sidebar.button("Get AI Advice"):
     if user_query.strip():
         with st.spinner("Thinking..."):
-            reply = get_llm_response(user_query.strip())
+            # Pass dataset + forecast summary
+            forecast_summary = forecast.tail(3)[["ds", "yhat"]].to_string(index=False)
+            data_summary = df.describe().to_string()
+
+            reply = get_llm_response(
+                f"{user_query.strip()}\n\nHere are forecasted values:\n{forecast_summary}",
+                data_summary
+            )
         st.sidebar.markdown(f"**AI Response:**\n\n{reply}")
     else:
         st.sidebar.warning("⚠️ Please enter a question before submitting.")
-
-# Main Dashboard section
-st.subheader("📊 Demand Forecast Dashboard")
-st.markdown("*(Your ML model outputs and visualizations go here)*")
-
-# Example placeholder chart
-st.line_chart({
-    "Whiskey": [120, 135, 150, 170],
-    "Wine": [80, 95, 110, 130],
-    "Beer": [200, 220, 250, 270]
-})
