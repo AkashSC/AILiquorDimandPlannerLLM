@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import streamlit as st
 
@@ -15,30 +16,34 @@ def get_llm_response(prompt: str) -> str:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
+
+    clean_prompt = prompt.strip()
+    if not clean_prompt:
+        return "⚠️ Please enter a valid question."
+
     payload = {
-        "model": "llama3-8b-8192",   # other options: llama3-70b-8192, mixtral-8x7b-32768
+        "model": "llama3-8b-8192",  # ✅ supported Groq model
         "messages": [
             {"role": "system", "content": "You are a helpful AI assistant for liquor demand planning."},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": clean_prompt}
         ],
-        "temperature": 0.7
+        "temperature": 0.7,
+        "max_tokens": 512
     }
 
     try:
         response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
+
+        if response.status_code != 200:
+            # Show full Groq error JSON for debugging
+            try:
+                err_data = response.json()
+                return f"⚠️ API Error:\n```json\n{json.dumps(err_data, indent=2)}\n```"
+            except Exception:
+                return f"⚠️ HTTP {response.status_code}: {response.text}"
+
         data = response.json()
         return data["choices"][0]["message"]["content"]
-
-    except requests.exceptions.HTTPError as http_err:
-        if response.status_code == 400:
-            return "⚠️ Bad Request: Please check your input."
-        elif response.status_code == 401:
-            return "❌ Unauthorized: Invalid or missing API key."
-        elif response.status_code == 429:
-            return "⏳ Rate limit exceeded. Please try again later."
-        else:
-            return f"❌ HTTP Error: {http_err}"
 
     except Exception as e:
         return f"❌ Unexpected Error: {e}"
